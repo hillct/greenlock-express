@@ -87,12 +87,10 @@ sni.create = function(greenlock, secureOpts) {
     }
 
     function getCachedMeta(servername) {
-        var meta = _cache[servername];
-        if (!meta) {
-            if (!_cache[wildname(servername)]) {
-                return null;
-            }
-        }
+        var meta = _cache[servername] || _cache[wildname(servername)];
+        if (!meta) 
+            return null;
+
         return meta;
     }
 
@@ -144,7 +142,7 @@ sni.create = function(greenlock, secureOpts) {
         return greenlock.get({ servername: servername }).then(function(result) {
             var meta = getCachedMeta(servername);
             if (!meta) {
-                meta = _cache[servername] = { secureContext: { _valid: false } };
+                meta = { secureContext: { _valid: false } };
             }
             // prevent from being punked by bot trolls
             meta.refreshAt = Date.now() + smallStagger;
