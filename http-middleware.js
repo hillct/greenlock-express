@@ -1,7 +1,7 @@
 "use strict";
 
 var HttpMiddleware = module.exports;
-var servernameRe = /^[a-z0-9\.\-]+$/i;
+var servernameRe = /^[a-z0-9\.\-_]+$/i;
 var challengePrefix = "/.well-known/acme-challenge/";
 
 HttpMiddleware.create = function(gl, defaultApp) {
