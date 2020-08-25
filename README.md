@@ -89,51 +89,94 @@ Works with _any_ node http app, including
 
 Serving sites with Free SSL is as easy as 1, 2, 3... 4
 
-### Overview
+## Overview
 
 1. Create a Project with Greenlock Express
     - `server.js`
     - `app.js`
 2. Setup the config file (or database)
+    - `.greenlockrc`
     - `greenlock.d/config.json`
 3. Add Domains
     - `npx greenlock add --subject example.com --altnames example.com`
 4. Hello, World!
     - `npm start -- --staging`
 
-## 1. Create your Project
+### TL;DR
+
+If you're familiar with node, npm, and npx: this is all you need to do:
 
 ```bash
-# Install the latest node, if needed
-curl -fsL bit.ly/node-installer | bash
+npm init
+npm install --save greenlock-express@v4
 
-# Create your project, add Greenlock Express v4
+npx greenlock init --config-dir greenlock.d --maintainer-email jon@example.com
+npx greenlock add --subject example.com --altnames example.com
+
+npm start -- --staging
+```
+
+Once you've tested that that works, you can change `app.js` to suit your needs replace the built-in callbacks for things like certificate storage as you like.
+
+## 1. Create your Project
+
+If you need to install Node.js, do so:
+
+Mac, Linux:
+
+```bash
+curl -fsS https://webinstall.dev/node | bash
+```
+
+Windows 10:
+
+```pwsh
+curl -fsSA "MS" https://webinstall.dev/node | powershell
+```
+
+Then create a directory for your project, and initialize it:
+
+```bash
+mkdir -p my-sites
+pushd my-sites
 npm init
 npm install --save greenlock-express@v4
 ```
 
-You can use **local file storage** or a **database**. The default is to use file storage.
-
 ## 2. Initialize and Config (Dir or DB)
 
+You can use **local file storage** or a **database**. The default is to use file storage.
+
+You'll need to create `server.js` and `greenlock.d/config.json`. You can do so using the CLI, API, or by hand.
+
+### Using the CLI (simplest, recommended)
+
+Anytime you install an npm module that contains an executable,
+you can run it using `npx`.
+
+To initialize the Greenlock config, run `npx greenlock init`:
+
 ```bash
-# Note: you can use the CLI to create `server.js` and `greenlock.d/config.json`
 npx greenlock init --config-dir ./greenlock.d --maintainer-email 'jon@example.com'
 ```
+
+### By Hand (for advanced users)
+
+Create `server.js` like so:
 
 `server.js`:
 
 ```js
-"use strict";
+'use strict';
 
-var app = require("./app.js");
+var app = require('./app.js');
 
-require("greenlock-express")
+require('greenlock-express')
     .init({
         packageRoot: __dirname,
 
-        // contact for security and critical bug notices
-        configDir: "./greenlock.d",
+        // where to look for configuration
+        configDir: './greenlock.d',
 
         // whether or not to run at cloudscale
         cluster: false
@@ -143,26 +186,54 @@ require("greenlock-express")
     .serve(app);
 ```
 
+Create `app.js` like so:
+
 `app.js`:
 
 ```js
-"use strict";
+'use strict';
 
 // Here's a vanilla HTTP app to start,
 // but feel free to replace it with Express, Koa, etc
 var app = function(req, res) {
-    res.end("Hello, Encrypted World!");
+    res.end('Hello, Encrypted World!');
 };
 
 module.exports = app;
 ```
 
-### 3. Add Sites
+Greenlock uses `.greenlockrc` to figure out whether to use the file system or a database for config,
+as well as where its root directory is.
+
+`.greenlockrc`
+
+```json
+{"manager":{"module":"@greenlock/manager"},"configDir":"greenlock.d"}
+```
+
+The `greenlock.d/config.json` is NOT intended to be edited by hand, as it is a substitute for a database, but it looks like this:
+
+```json
+{ "defaults": { "subscriberEmail": "john.doe@example.com" }, "sites": [] }
+```
+
+## 3. Add Sites
+
+For security, you must specify which sites you allow to request certificates. If you need this to be dynamic (i.e. checking a database or API, see the section below on custom site managers).
+
+Every site has a "subject" (its primary domain name) and one or more "altnames" (secondary or related domain names on the same certificate).
+
+### Using CLI (simple, recommended)
+
+Simply supply the names of sites that you manage and they will be added to the file system config, or database.
 
 ```bash
-# Note: you can use the CLI to edit the config file
 npx greenlock add --subject example.com --altnames example.com,www.example.com
 ```
+
+### By Hand (debugging only)
+
+You should NOT edit `greenlock.d/config.json` with your own tools. Use `greenlock.manager.add({})` instead.
 
 `greenlock.d/config.json`:
 
@@ -172,7 +243,15 @@ npx greenlock add --subject example.com --altnames example.com,www.example.com
 { "sites": [{ "subject": "example.com", "altnames": [ "example.com", "www.example.com" ] }] }
 ```
 
-### 4. Hello, Encrypted World!
+## 4. Hello, Encrypted World!
+
+That was it! Now you can run your server!
+
+When you run `npm start`, it will automatically run `node server.js` (or `package.json.scripts.start`).
+
+For arguments that `npm start` should ignore, place them after `--`.
+
+Here we use `--staging` in order to tell greenlock to issue test certificates rather than real certificates.
 
 ```bash
 # Note: you can use npm start to run server.js with the --staging flag set
@@ -187,7 +266,40 @@ Listening on 0.0.0.0:80 for ACME challenges and HTTPS redirects
 Listening on 0.0.0.0:443 for secure traffic
 ```
 
-## Walkthrough
+If everything worked you can visit your site in your browser, and after a few seconds you'll get a certificate warning and, after that, see a "Hello World" message. The debug (staging) certificates will be saved in `greenlock.d/staging`. Run again without `--staging` and you will get real certificates.
+
+### Season to taste
+
+Now you're ready to update `app.js` with your code. For example, try this next:
+
+```bash
+npm install --save express
+mkdir -p public
+echo '<h1>Hello!</h1>' >> public/index.html
+```
+
+`app.js`:
+
+```js
+'use strict';
+
+var path = require('path');
+var express = require('express');
+var app = express();
+
+app.get('/', express.static(path.join(__dirname, "public")));
+
+module.exports = app;
+
+// for development and debugging
+if (require.main === module) {
+    require('http').createServer(app).listen(3000, function () {
+        console.info("Listening for HTTP on", this.address());
+    });
+}
+```
+
+# Walkthrough
 
 For a more detail read the full
 [WALKTHROUGH](https://git.rootprojects.org/root/greenlock-express.js/src/branch/master/WALKTHROUGH.md).
@@ -220,6 +332,45 @@ To see all of the examples, just browse [greenlock-express.js/examples/](https:/
 [ex-localhost]: https://git.rootprojects.org/root/greenlock-express.js/src/branch/master/examples/localhost/
 [ex-cicd]: https://git.rootprojects.org/root/greenlock-express.js/src/branch/master/examples/ci-cd/
 [ex-http-proxy]: https://git.rootprojects.org/root/greenlock-express.js/src/branch/master/examples/http-proxy/
+
+
+# FAQ
+## 1. But did YOU read the QuickStart?
+
+99% of the questions I get are answered in the QuickStart, or in the Examples.
+
+Before you go into your specific use case, just try out the QuickStart from start to finish so that you can see that the default setup works, you get feel for the "lay of the land", and you know what to edit.
+
+## 2. How to use JavaScript configuration?
+
+You don't. It's JSON on purpose.
+
+The configuration has to be serializable (i.e. could go in a database).
+
+The config file is meant for **simple** use cases, for the average dev and it is managed with `npx greenlock ...`, as shown in the QuickStart.
+
+If you have a **dynamic** or **advanced** use case (i.e. you need stuff in a database, or to change config on-the-fly), you can use the Greenlock API (not Greenlock Express) and you'll love it.
+
+If you're layering a lot of **complexity** with dev ops tools, but you don't really understand the tools that well (i.e. **Docker**), either use ENVIRONMENT variables or put the `npx greenlock ...` commands in your setup script. You MUST use a database for **lambda** "cloud functions" and such.
+
+You can also just mangle the Greenlock API to do what you want... but I don't recommend it. Keep it simple and your future self with thank you.
+
+General rule of thumb: commit code, not data / config.
+
+## 3. How to use non-standard ports (not 80, 443)?
+
+You don't. Not usually.
+
+Let's Encrypt **REQUIRES port 80** for HTTP-01 challenges.
+
+But if you're using DNS-01 or you have a proxy in place, just use the raw node server. See these examples:
+
+- [examples/http/server.js](https://git.rootprojects.org/root/greenlock-express.js/src/branch/master/examples/http/server.js)
+- [examples/https/server.js](https://git.rootprojects.org/root/greenlock-express.js/src/branch/master/examples/https/server.js)
+
+If you want to use Greenlock as a proxy, see this example:
+
+- [examples/http-proxy/server.js](https://git.rootprojects.org/root/greenlock-express.js/src/branch/master/examples/http-proxy/server.js)
 
 # Troubleshooting
 
